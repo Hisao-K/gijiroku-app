@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>gijiroku-app</title>
+  <meta name="theme-color" content="#E7741D">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="gijiroku-app">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="referrer" content="no-referrer">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+  <script src="config.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <header class="bar">
+    <h1>gijiroku-app</h1>
+    <span id="who" class="who"></span>
+    <button id="logout" class="close" hidden>閉じる</button>
+  </header>
+
+  <main>
+    <!-- 設定：この会社のGASのURLがまだない -->
+    <section id="view-setup" class="view" hidden>
+      <h2>はじめの設定</h2>
+      <p>導入のときにお渡しした「設定用リンク」を開いてください。リンクが開けないときは、お渡しした設定コード（https://script.google.com/… で始まるURL）を貼り付けてください。</p>
+      <label class="field">設定コード
+        <input id="setup-url" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">
+      </label>
+      <button id="setup-save" class="primary">保存する</button>
+      <p id="setup-msg" class="msg"></p>
+    </section>
+
+    <!-- ログイン -->
+    <section id="view-login" class="view" hidden>
+      <h2>ログイン</h2>
+      <p>会社の Google アカウントでログインしてください。議事録は同じ会社の社員だけが見られます。</p>
+      <div id="gsi-button"></div>
+      <p id="login-msg" class="msg"></p>
+    </section>
+
+    <!-- メイン -->
+    <section id="view-main" class="view" hidden>
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="upload" aria-selected="true">🎙 登録</button>
+        <button role="tab" data-tab="history" aria-selected="false">📋 履歴</button>
+        <button role="tab" data-tab="todo" aria-selected="false">✅ TODO</button>
+      </nav>
+
+      <!-- 登録：録音した音声を送る -->
+      <div id="tab-upload" class="tab">
+        <p class="hint">会議はスマホの録音アプリで録音してください（iPhone はボイスメモ、Android はレコーダーなど）。録り終えたら、ここで音声ファイルを選んで送ります。送ったあとは、文字起こし・議事メモ・TODO を自動で作ります。</p>
+        <details class="help">
+          <summary>音声ファイルの選び方</summary>
+          <p><b>iPhone</b>：ボイスメモで録音を開き、「…」→「"ファイル"に保存」で保存します。そのあと下の「音声ファイルを選ぶ」から選びます。</p>
+          <p><b>Android</b>：「音声ファイルを選ぶ」から、録音アプリの保存先（Recordings など）を開いて選びます。</p>
+          <p><b>Google ドライブのアプリから</b>：「受付」フォルダに音声を入れても議事録になります。会議名はファイル名、開催日はファイルを入れた日になります。</p>
+          <p id="inbox-link" hidden><a target="_blank" rel="noopener">受付フォルダを開く</a></p>
+        </details>
+
+        <button id="pick" class="shoot">🎙 音声ファイルを選ぶ</button>
+        <p id="file-info" class="file-info" hidden></p>
+
+        <label class="field" for="f-title">会議名</label>
+        <input id="f-title" type="text" maxlength="100" placeholder="例：営業定例" autocomplete="off">
+        <label class="field" for="f-date">開催日</label>
+        <input id="f-date" type="date">
+        <label class="field" for="f-attendees">参加者（任意）</label>
+        <input id="f-attendees" type="text" maxlength="300" placeholder="例：山田、佐藤、鈴木" autocomplete="off">
+        <label class="field" for="f-glossary">用語（任意）</label>
+        <textarea id="f-glossary" rows="2" maxlength="1000" placeholder="社名・人名・専門用語を「、」で区切って書くと、文字起こしの表記がそろいます"></textarea>
+
+        <button id="do-upload" class="primary" disabled>送って議事録を作る</button>
+        <div id="progress" class="progress" hidden>
+          <div class="meter"><div id="meter-fill"></div></div>
+          <p id="progress-text"></p>
+        </div>
+        <p id="upload-msg" class="msg"></p>
+        <button id="upload-open" class="link" hidden>この会議を開く →</button>
+      </div>
+
+      <!-- 履歴 -->
+      <div id="tab-history" class="tab" hidden>
+        <div class="row">
+          <input id="h-q" type="search" enterkeyhint="search" placeholder="会議名・参加者・内容で探す">
+          <button id="h-reload" class="mic" aria-label="読み直す">↻</button>
+        </div>
+        <p id="h-msg" class="msg"></p>
+        <ul id="h-list" class="list"></ul>
+      </div>
+
+      <!-- TODO -->
+      <div id="tab-todo" class="tab" hidden>
+        <div class="seg" role="radiogroup" aria-label="表示するTODO">
+          <label><input type="radio" name="tfilter" value="open" checked> 未完了</label>
+          <label><input type="radio" name="tfilter" value="done"> 完了</label>
+          <label><input type="radio" name="tfilter" value="all"> すべて</label>
+        </div>
+        <input id="t-q" type="search" placeholder="担当・内容で絞り込む">
+        <p id="t-msg" class="msg"></p>
+        <ul id="t-list" class="todos"></ul>
+      </div>
+    </section>
+
+    <!-- 会議の詳細 -->
+    <section id="view-detail" class="view" hidden>
+      <button id="detail-back" class="link">← 戻る</button>
+      <div id="detail-head"></div>
+      <div id="detail-status"></div>
+      <div id="detail-body"></div>
+      <div id="detail-actions" class="actions" hidden>
+        <button id="act-copy">📋 議事メモをコピー</button>
+        <button id="act-transcript">📝 文字起こしを見る</button>
+      </div>
+      <ul id="detail-links" class="links"></ul>
+      <p id="detail-msg" class="msg"></p>
+      <pre id="detail-transcript" class="transcript" hidden></pre>
+    </section>
+  </main>
+
+  <input id="file-audio" type="file" accept="audio/*,.m4a,.mp3,.wav,.aac,.ogg,.oga,.opus,.webm,.flac,.aiff,.aif,.mp4" hidden>
+
+  <div id="busy" class="busy" hidden><div class="spinner"></div><p id="busy-text">処理しています…</p></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

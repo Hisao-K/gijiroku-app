@@ -1,0 +1,14 @@
+{
+  "name": "gijiroku-app",
+  "short_name": "gijiroku-app",
+  "description": "会議の録音を送ると、文字起こし・議事メモ・TODOを作って履歴に残すアプリ",
+  "lang": "ja",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#E7741D",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
