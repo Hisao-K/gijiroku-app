@@ -664,23 +664,26 @@
 
     var j = m.minutesJson;
     if (j) {
-      $('detail-body').replaceChildren(
+      // 中身のない項目は見出しを出さず、最後の「該当なし」の1行にまとめる（議事メモのドキュメントと同じ）
+      var empty = emptyLabels(j, m.todos.length);
+      $('detail-body').replaceChildren.apply($('detail-body'), [
         section('概要', [el('p', { text: j.summary || 'なし' })]),
-        section('決定事項', [bullets(j.decisions)]),
-        section('TODO', [m.todos.length
-          ? el('ul', { class: 'todos' }, m.todos.map(function (t) { return todoItem(t, false); }))
-          : el('p', { class: 'none', text: 'なし' })]),
-        section('議題ごとの要点', j.topics.length ? j.topics.map(function (t) {
+        j.keyPoints && j.keyPoints.length ? section('要点', [bullets(j.keyPoints)]) : null,
+        j.decisions.length ? section('決定事項', [bullets(j.decisions)]) : null,
+        m.todos.length ? section('TODO', [el('ul', { class: 'todos' }, m.todos.map(function (t) { return todoItem(t, false); }))]) : null,
+        j.topics.length ? section('議題ごとの要点', j.topics.map(function (t) {
           return el('div', { class: 'topic' }, [el('h4', { text: t.title }), bullets(t.points)]);
-        }) : [el('p', { class: 'none', text: 'なし' })]),
-        section('保留・持ち越し', [bullets(j.openIssues)]),
-        section('次回', [el('p', { text: j.nextMeeting || '話に出なかった' })]),
-        el('p', { class: 'hint', text: 'AI が録音から作った内容です。使う前に確認してください。手直しは下の「議事メモ（Google ドキュメント）」で行えます（この画面には最初に作った内容が出ます）。' })
-      );
+        })) : null,
+        j.openIssues.length ? section('保留・持ち越し', [bullets(j.openIssues)]) : null,
+        j.nextMeeting ? section('次回', [el('p', { text: j.nextMeeting })]) : null,
+        empty.length ? el('p', { class: 'none', text: '該当なし：' + empty.join('、') }) : null,
+        el('p', { class: 'hint', text: 'AI が録音から作った内容です。使う前に確認してください。手直しは下の「議事メモ（Google ドキュメント）」で行えます（この画面には最初に作った内容が出ます）。' }),
+      ].filter(Boolean));
     } else {
       $('detail-body').replaceChildren();
     }
     $('detail-actions').hidden = !j;
+    $('act-remake').hidden = !(j && m.links.transcript);
     $('act-transcript').hidden = !(m.links.transcript || m.status === '処理中');
 
     var links = [
@@ -717,30 +720,58 @@
     }).catch(function (e) { idle(); msg('detail-msg', errText(e), 'err'); });
   });
 
+  $('act-remake').addEventListener('click', function () {
+    var m = state.meeting;
+    if (!m) return;
+    if (!confirm('議事メモを、文字起こしのドキュメントから作り直します。\n今の議事メモのドキュメントは残し、新しいドキュメントを別に作ります。TODO はそのまま残します。\n作り直しますか？')) return;
+    busy('作り直しを受け付けています…');
+    api('remake', { id: m.id }).then(function (res) {
+      idle();
+      if (!res.ok) { msg('detail-msg', errText(res), 'err'); return; }
+      msg('detail-msg', '作り直しを受け付けました。1〜2分でできあがります。', 'ok');
+      loadMeeting(m.id, true);
+    }).catch(function (e) { idle(); msg('detail-msg', errText(e), 'err'); });
+  });
+
+  /** 中身のない項目の名前（議事メモのドキュメントと同じ並び） */
+  function emptyLabels(j, todoCount) {
+    var out = [];
+    if (!j.decisions.length) out.push('決定事項');
+    if (!todoCount) out.push('TODO');
+    if (!j.openIssues.length) out.push('保留・持ち越し');
+    if (!j.nextMeeting) out.push('次回');
+    return out;
+  }
+
   /** 議事メモを文字にする（LINE・メールに貼る用） */
   function minutesPlain(m) {
     var j = m.minutesJson;
     var lines = ['議事メモ　' + m.title, '開催日：' + m.date + (m.attendees ? '　参加者：' + m.attendees : ''), ''];
     function list(title, items) {
+      if (!items || !items.length) return;
       lines.push('■' + title);
-      (items.length ? items : ['なし']).forEach(function (s) { lines.push('・' + s); });
+      items.forEach(function (s) { lines.push('・' + s); });
       lines.push('');
     }
     lines.push('■概要', j.summary || 'なし', '');
+    list('要点', j.keyPoints);
     list('決定事項', j.decisions);
     list('TODO', m.todos.map(function (t) {
       return t.task + '（担当：' + (t.owner || '未定') + '／期限：' + (t.due || '未定') + '）' + (t.done ? '［完了］' : '');
     }));
-    lines.push('■議題ごとの要点');
-    if (!j.topics.length) lines.push('なし');
-    j.topics.forEach(function (t) {
-      lines.push('【' + t.title + '】');
-      t.points.forEach(function (p) { lines.push('・' + p); });
-    });
-    lines.push('');
+    if (j.topics.length) {
+      lines.push('■議題ごとの要点');
+      j.topics.forEach(function (t) {
+        lines.push('【' + t.title + '】');
+        t.points.forEach(function (p) { lines.push('・' + p); });
+      });
+      lines.push('');
+    }
     list('保留・持ち越し', j.openIssues);
-    lines.push('■次回', j.nextMeeting || '話に出なかった');
-    return lines.join('\n');
+    if (j.nextMeeting) lines.push('■次回', j.nextMeeting, '');
+    var empty = emptyLabels(j, m.todos.length);
+    if (empty.length) lines.push('該当なし：' + empty.join('、'));
+    return lines.join('\n').replace(/\n+$/, '');
   }
 
   $('act-copy').addEventListener('click', function () {
