@@ -1,6 +1,6 @@
 {
-  "name": "gijiroku-app",
-  "short_name": "gijiroku-app",
+  "name": "記録の達人",
+  "short_name": "記録の達人",
   "description": "会議の録音を送ると、文字起こし・議事メモ・TODOを作って履歴に残すアプリ",
   "lang": "ja",
   "display": "standalone",
